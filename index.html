@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Clicker Chat – Two Person Room</title>
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --card: #1a1a24;
+      --accent: #ff4d6d;
+      --accent-hover: #ff2e55;
+      --text: #f0f0f5;
+      --muted: #8a8a9a;
+      --success: #4ade80;
+      --border: #2a2a3a;
+      --msg-you: #2d2d44;
+      --msg-friend: #1e3a2f;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 12px;
+      line-height: 1.4;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 24px);
+      max-height: 900px;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1f1f2e, #161622);
+      padding: 16px 20px 12px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    header p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .connection-panel {
+      padding: 14px 16px;
+      background: #14141c;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .id-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .id-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    #my-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      background: #0d0d14;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+
+    #copy-id {
+      background: #2a2a3a;
+      color: var(--text);
+      padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    #copy-id:active {
+      background: #3a3a4a;
+    }
+
+    .connect-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    #remote-id {
+      flex: 1;
+      background: #0d0d14;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    #remote-id:focus {
+      border-color: var(--accent);
+    }
+
+    #connect-btn {
+      background: var(--accent);
+      color: white;
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    #connect-btn:active {
+      background: var(--accent-hover);
+      transform: scale(0.97);
+    }
+
+    #connect-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #status.connected {
+      color: var(--success);
+    }
+
+    #status.connected::before {
+      content: "●";
+      font-size: 0.7rem;
+    }
+
+    .chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #12121a;
+    }
+
+    .msg {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 0.95rem;
+      word-wrap: break-word;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg.you {
+      align-self: flex-end;
+      background: var(--msg-you);
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg.friend {
+      align-self: flex-start;
+      background: var(--msg-friend);
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg.system {
+      align-self: center;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.8rem;
+      padding: 4px 0;
+    }
+
+    .msg .time {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 4px;
+      opacity: 0.8;
+    }
+
+    .input-bar {
+      display: flex;
+      gap: 8px;
+      padding: 12px 14px;
+      background: #14141c;
+      border-top: 1px solid var(--border);
+    }
+
+    #msg-input {
+      flex: 1;
+      background: #0d0d14;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 1rem;
+      outline: none;
+    }
+
+    #msg-input:focus {
+      border-color: #4a4a6a;
+    }
+
+    #send-btn {
+      background: #3b82f6;
+      color: white;
+      padding: 0 18px;
+      font-size: 0.95rem;
+    }
+
+    #send-btn:active {
+      background: #2563eb;
+      transform: scale(0.97);
+    }
+
+    .clicker-section {
+      padding: 16px 20px 20px;
+      background: #0f0f17;
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    #clicker-btn {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #ff6b81, var(--accent));
+      color: white;
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      box-shadow: 
+        0 8px 0 #c41e3a,
+        0 12px 24px rgba(255, 77, 109, 0.4),
+        inset 0 2px 8px rgba(255,255,255,0.25);
+      transition: all 0.08s ease;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    #clicker-btn:active,
+    #clicker-btn.pressed {
+      transform: translateY(6px);
+      box-shadow: 
+        0 2px 0 #c41e3a,
+        0 4px 12px rgba(255, 77, 109, 0.3),
+        inset 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .clicker-hint {
+      margin-top: 12px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      font-size: 0.7rem;
+      color: #555;
+      text-align: center;
+      padding: 8px;
+      background: #0a0a0f;
+    }
+
+    /* Mobile tweaks */
+    @media (max-width: 400px) {
+      #clicker-btn {
+        width: 120px;
+        height: 120px;
+        font-size: 1.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🐶 Clicker Chat</h1>
+      <p>Private 2-person room • Peer-to-peer</p>
+    </header>
+
+    <div class="connection-panel">
+      <div class="id-row">
+        <span class="id-label">Your ID</span>
+        <div id="my-id">Connecting…</div>
+        <button id="copy-id" title="Copy ID">Copy</button>
+      </div>
+      <div class="connect-row">
+        <input id="remote-id" type="text" placeholder="Paste friend's ID here" autocomplete="off" spellcheck="false">
+        <button id="connect-btn">Connect</button>
+      </div>
+      <div id="status">Waiting for PeerJS…</div>
+    </div>
+
+    <div class="chat-area" id="messages">
+      <div class="msg system">Share your ID with a friend. When connected you can chat and click together.</div>
+    </div>
+
+    <div class="input-bar">
+      <input id="msg-input" type="text" placeholder="Type a message…" autocomplete="off">
+      <button id="send-btn">Send</button>
+    </div>
+
+    <div class="clicker-section">
+      <button id="clicker-btn">CLICK</button>
+      <p class="clicker-hint">Tap for the classic dog-training clicker sound<br>(both sides hear it when connected)</p>
+    </div>
+
+    <div class="footer-note">Powered by PeerJS • No server stores your messages</div>
+  </div>
+
+  <script>
+    // ─── Web Audio Clicker Sound ───────────────────────────────────────────
+    let audioCtx = null;
+
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playClickerSound() {
+      const ctx = getAudioContext();
+      const duration = 0.04; // 40ms
+      const sampleRate = ctx.sampleRate;
+      const length = Math.floor(sampleRate * duration);
+      const buffer = ctx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      // Sharp metallic click: high-frequency noise with very fast exponential decay
+      for (let i = 0; i < length; i++) {
+        const t = i / sampleRate;
+        // Mix of noise + brief high tone for "clicky" character
+        const noise = (Math.random() * 2 - 1);
+        const tone = Math.sin(2 * Math.PI * 3200 * t); // ~3.2 kHz peak
+        data[i] = (noise * 0.7 + tone * 0.3) * Math.exp(-t * 90);
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+
+      // High-pass filter to make it crisp
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 1800;
+      filter.Q.value = 1.2;
+
+      const gain = ctx.createGain();
+      gain.gain.value = 0.9;
+
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      source.start();
+    }
+
+    // ─── UI Helpers ───────────────────────────────────────────────────────
+    const messagesEl = document.getElementById('messages');
+    const statusEl = document.getElementById('status');
+    const myIdEl = document.getElementById('my-id');
+    const remoteIdInput = document.getElementById('remote-id');
+    const connectBtn = document.getElementById('connect-btn');
+    const msgInput = document.getElementById('msg-input');
+    const sendBtn = document.getElementById('send-btn');
+    const clickerBtn = document.getElementById('clicker-btn');
+    const copyBtn = document.getElementById('copy-id');
+
+    function addMessage(text, type = 'system') {
+      const div = document.createElement('div');
+      div.className = `msg ${type}`;
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (type === 'system') {
+        div.textContent = text;
+      } else {
+        div.innerHTML = `${escapeHtml(text)}<span class="time">${time}</span>`;
+      }
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function setStatus(text, connected = false) {
+      statusEl.textContent = text;
+      statusEl.className = connected ? 'connected' : '';
+    }
+
+    // ─── PeerJS Logic ─────────────────────────────────────────────────────
+    let peer = null;
+    let conn = null;
+    let myId = null;
+
+    function initPeer() {
+      peer = new Peer({
+        debug: 1
+      });
+
+      peer.on('open', (id) => {
+        myId = id;
+        myIdEl.textContent = id;
+        setStatus('Ready – share your ID or connect to a friend');
+      });
+
+      peer.on('connection', (c) => {
+        if (conn && conn.open) {
+          c.close(); // already connected
+          return;
+        }
+        setupConnection(c);
+      });
+
+      peer.on('error', (err) => {
+        console.error(err);
+        setStatus('Error: ' + err.type);
+        if (err.type === 'peer-unavailable') {
+          addMessage('Could not find that peer ID. Check and try again.', 'system');
+        }
+      });
+
+      peer.on('disconnected', () => {
+        setStatus('Disconnected from signaling server. Reconnecting…');
+        peer.reconnect();
+      });
+    }
+
+    function setupConnection(c) {
+      conn = c;
+      connectBtn.disabled = true;
+      remoteIdInput.disabled = true;
+
+      conn.on('open', () => {
+        setStatus('Connected to ' + conn.peer, true);
+        addMessage('Connected! You can now chat and click together.', 'system');
+      });
+
+      conn.on('data', (data) => {
+        if (typeof data === 'object' && data !== null) {
+          if (data.type === 'click') {
+            playClickerSound();
+            // optional visual feedback
+            clickerBtn.classList.add('pressed');
+            setTimeout(() => clickerBtn.classList.remove('pressed'), 120);
+          } else if (data.type === 'msg') {
+            addMessage(data.text, 'friend');
+          }
+        } else if (typeof data === 'string') {
+          // fallback plain text
+          addMessage(data, 'friend');
+        }
+      });
+
+      conn.on('close', () => {
+        setStatus('Connection closed');
+        addMessage('Friend disconnected.', 'system');
+        conn = null;
+        connectBtn.disabled = false;
+        remoteIdInput.disabled = false;
+      });
+
+      conn.on('error', (err) => {
+        console.error('Connection error', err);
+        setStatus('Connection error');
+      });
+    }
+
+    function connectToPeer() {
+      const remoteId = remoteIdInput.value.trim();
+      if (!remoteId) {
+        addMessage('Please enter a Peer ID first.', 'system');
+        return;
+      }
+      if (conn && conn.open) {
+        addMessage('Already connected.', 'system');
+        return;
+      }
+      if (remoteId === myId) {
+        addMessage('That is your own ID.', 'system');
+        return;
+      }
+
+      setStatus('Connecting…');
+      const c = peer.connect(remoteId, { reliable: true });
+      setupConnection(c);
+    }
+
+    function sendMessage() {
+      const text = msgInput.value.trim();
+      if (!text) return;
+
+      if (!conn || !conn.open) {
+        addMessage('Not connected yet. Share IDs first.', 'system');
+        return;
+      }
+
+      conn.send({ type: 'msg', text });
+      addMessage(text, 'you');
+      msgInput.value = '';
+      msgInput.focus();
+    }
+
+    function triggerClick() {
+      playClickerSound();
+      clickerBtn.classList.add('pressed');
+      setTimeout(() => clickerBtn.classList.remove('pressed'), 120);
+
+      if (conn && conn.open) {
+        conn.send({ type: 'click' });
+      }
+    }
+
+    // ─── Event Listeners ──────────────────────────────────────────────────
+    connectBtn.addEventListener('click', connectToPeer);
+    sendBtn.addEventListener('click', sendMessage);
+    msgInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+    remoteIdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') connectToPeer();
+    });
+
+    clickerBtn.addEventListener('click', triggerClick);
+    // Also support touch for mobile
+    clickerBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      triggerClick();
+    }, { passive: false });
+
+    copyBtn.addEventListener('click', () => {
+      if (!myId) return;
+      navigator.clipboard.writeText(myId).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+      }).catch(() => {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = myId;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+      });
+    });
+
+    // Init
+    initPeer();
+
+    // Unlock audio on first user gesture (required by browsers)
+    document.body.addEventListener('click', () => getAudioContext(), { once: true });
+    document.body.addEventListener('touchstart', () => getAudioContext(), { once: true });
+  </script>
+</body>
+</html>
